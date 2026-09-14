@@ -1,0 +1,101 @@
+import streamlit as st
+import pandas as pd
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
+from reportlab.graphics.barcode.qr import QrCodeWidget
+import io
+
+def draw_centred_string_extended(c, center_x, y, text, font_name, font_size, char_space=0.7):
+    base_w = c.stringWidth(text, font_name, font_size)
+    total_w = base_w + (len(text) - 1) * char_space if len(text) > 1 else base_w
+    start_x = center_x - total_w / 2.0
+    
+    textobj = c.beginText()
+    textobj.setTextOrigin(start_x, y)
+    textobj.setFont(font_name, font_size)
+    textobj.setCharSpace(char_space)
+    textobj.textOut(text)
+    c.drawText(textobj)
+
+def generate_voucher_pdf(excel_file):
+    df = pd.read_excel(excel_file, sheet_name=0)
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    cols, rows = 5, 10
+    gap_x, gap_y = 4, 4
+    page_margin_x, page_margin_y = 12, 12
+
+    total_gaps_x = (cols - 1) * gap_x
+    total_gaps_y = (rows - 1) * gap_y
+
+    cell_w = (width - 2 * page_margin_x - total_gaps_x) / cols
+    cell_h = (height - 2 * page_margin_y - total_gaps_y) / rows
+
+    idx = 0
+    total_vouchers = len(df)
+    while idx < total_vouchers:
+        for r in range(rows):
+            for col in range(cols):
+                if idx >= total_vouchers: break
+                data = df.iloc[idx]
+                
+                x = page_margin_x + col * (cell_w + gap_x)
+                y = height - page_margin_y - (r + 1) * cell_h - r * gap_y
+                
+                c.setLineWidth(0.5)
+                c.setStrokeColorRGB(0.2, 0.2, 0.2)
+                c.rect(x, y, cell_w, cell_h)
+                
+                c.setFillColorRGB(0, 0, 0)
+                c.setFont("Helvetica-Bold", 10)
+                c.drawCentredString(x + cell_w/2, y + cell_h - 11, "ROYAL")
+                
+                qr_size = 48
+                qrw = QrCodeWidget(str(data['Voucher code']))
+                bounds = qrw.getBounds()
+                scale = qr_size / (bounds[2] - bounds[0])
+                d = Drawing(qr_size, qr_size)
+                d.add(qrw)
+                d.scale(scale, scale)
+                
+                qr_x = x + (cell_w - qr_size)/2
+                qr_y = y + cell_h - 12 - qr_size
+                renderPDF.draw(d, c, qr_x, qr_y)
+                
+                full_code = str(data['Voucher code'])
+                draw_centred_string_extended(c, x + cell_w/2, y + 14.5, full_code, "Helvetica-Bold", 9, char_space=0.7)
+                
+                period_str = str(data['Period'])
+                price_str = f"{data['Price']} Ks"
+                combined_str = f"{period_str} / {price_str}"
+                c.setFont("Helvetica", 8.5)
+                c.drawCentredString(x + cell_w/2, y + 3.5, combined_str)
+                
+                idx += 1
+            if idx >= total_vouchers: break
+        c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+st.set_page_config(page_title="ROYAL Voucher Generator", page_icon="🎫")
+st.title("ROYAL Voucher Generator 🎫")
+st.write("Excel ဖိုင်တင်ပြီး Voucher PDF ဖိုင် ချက်ချင်း ထုတ်ယူပါ၊၊")
+
+uploaded_file = st.file_uploader("Voucher Excel ဖိုင် ရွေးချယ်ပါ (.xlsx)", type=["xlsx", "xls"])
+
+if uploaded_file is not None:
+    if st.button("PDF Voucher ထုတ်မည်"):
+        with st.spinner("PDF ပြုလုပ်နေပါသည်..."):
+            pdf_bytes = generate_voucher_pdf(uploaded_file)
+            st.success("အောင်မြင်စွာ ထုတ်လုပ်ပြီးပါပြီခင်ဗျာ။")
+            st.download_button(
+                label="PDF ဖိုင် ဒေါင်းလုဒ်ဆွဲရန်",
+                data=pdf_bytes,
+                file_name="ROYAL_Vouchers.pdf",
+                mime="application/pdf"
+            )
