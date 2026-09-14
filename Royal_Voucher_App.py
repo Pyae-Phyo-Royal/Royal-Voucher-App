@@ -1,3 +1,12 @@
+import sys
+import subprocess
+
+# Streamlit မှ reportlab ကို မတွေ့ပါက အလိုအလျောက် သွင်းပေးမည့် Code
+try:
+    import reportlab
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "reportlab", "pandas", "openpyxl"])
+
 import streamlit as st
 import pandas as pd
 from reportlab.pdfgen import canvas
